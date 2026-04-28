@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: rekly_db
+    restart: always
+    environment:
+      POSTGRES_USER: rekly
+      POSTGRES_PASSWORD: rekly123
+      POSTGRES_DB: rekly
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
