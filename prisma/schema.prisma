@@ -13,7 +13,6 @@ model Usuario {
   senha     String
   criado_em DateTime @default(now())
 
-  // Relações (serão usadas nas próximas entregas)
   assinaturas          Assinatura[]
   notificacoes         Notificacao[]
   preferenciasNotif    PreferenciaNotificacao?
@@ -35,28 +34,27 @@ model PreferenciaNotificacao {
 }
 
 model Log {
-  id           Int      @id @default(autoincrement())
-  usuario_id   Int?
-  acao         String
+  id             Int      @id @default(autoincrement())
+  usuario_id     Int?
+  acao           String
   tabela_afetada String?
-  registro_id  Int?
-  criado_em    DateTime @default(now())
+  registro_id    Int?
+  criado_em      DateTime @default(now())
 
   usuario Usuario? @relation(fields: [usuario_id], references: [id])
 
   @@map("logs")
 }
 
-// Tabelas das próximas entregas (criadas agora para não migrar depois)
-
 model Categoria {
-  id         Int          @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   nome       String
-  is_padrao  Boolean      @default(false)
+  is_padrao  Boolean @default(false)
   usuario_id Int?
 
   assinaturas Assinatura[]
 
+  @@unique([nome, usuario_id], name: "nome_usuario_unique")
   @@map("categorias")
 }
 
@@ -67,10 +65,10 @@ model Assinatura {
   nome_servico String
   valor        Decimal
   moeda        String   @default("BRL")
-  periodo      String   // mensal, trimestral, semestral, anual
+  periodo      String
   data_inicio  DateTime
   dia_cobranca Int
-  status       String   @default("ativo") // ativo, teste, cancelado
+  status       String   @default("ativo")
   participantes Int     @default(1)
   criado_em    DateTime @default(now())
 
@@ -87,7 +85,7 @@ model Pagamento {
   assinatura_id  Int
   valor          Decimal
   data_pagamento DateTime
-  status         String   // pago, pendente, atrasado
+  status         String
 
   assinatura Assinatura @relation(fields: [assinatura_id], references: [id])
 
@@ -97,7 +95,7 @@ model Pagamento {
 model Notificacao {
   id         Int      @id @default(autoincrement())
   usuario_id Int
-  tipo       String   // vencimento, atraso
+  tipo       String
   mensagem   String
   enviado_em DateTime @default(now())
   lido       Boolean  @default(false)
@@ -111,7 +109,7 @@ model SugestaoEconomia {
   id            Int      @id @default(autoincrement())
   usuario_id    Int
   assinatura_id Int
-  tipo          String   // sobreposicao, desuso
+  tipo          String
   descricao     String
   dispensada    Boolean  @default(false)
   exibida       Boolean  @default(true)
