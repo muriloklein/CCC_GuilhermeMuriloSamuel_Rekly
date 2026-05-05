@@ -1,13 +1,14 @@
-import path from 'node:path'
-import { defineConfig } from 'prisma/config'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from '@prisma/client'
 
-export default defineConfig({
-    earlyAccess: true,
-    schema: path.join('prisma', 'schema.prisma'),
-    migrate: {
-        async adapter() {
-        const { PrismaPg } = await import('@prisma/adapter-pg')
-        return new PrismaPg({ connectionString: process.env.DATABASE_URL })
-    },
-},
-})
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
+  })
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma
+}
