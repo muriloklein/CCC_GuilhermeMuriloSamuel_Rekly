@@ -35,7 +35,13 @@ export default function NavBar() {
           ))}
         </div>
       </div>
-      <button onClick={logout} className="text-sm text-gray-400 hover:text-red-600 transition">Sair</button>
+      <div className="flex items-center gap-4">
+        <Link href="/profile"
+          className={`text-sm font-medium transition ${path.startsWith('/profile') ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}>
+          Perfil & Privacidade
+        </Link>
+        <button onClick={logout} className="text-sm text-gray-400 hover:text-red-600 transition">Sair</button>
+      </div>
     </nav>
   )
 }
