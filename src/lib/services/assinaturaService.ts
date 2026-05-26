@@ -1,5 +1,6 @@
 import * as repo from '../repositories/assinaturaRepository'
 import { registrarLog } from '../repositories/usuarioRepository'
+import { recalcularSugestoes } from './economyService'
 
 const PERIODOS_VALIDOS = ['mensal', 'trimestral', 'semestral', 'anual']
 const STATUS_VALIDOS = ['ativo', 'teste', 'cancelado']
@@ -58,6 +59,7 @@ export async function criar(usuarioId: number, body: Record<string, unknown>) {
   })
 
   await registrarLog(usuarioId, 'CRIAR_ASSINATURA', 'assinaturas', assinatura.id)
+  await recalcularSugestoes(usuarioId)
   return { assinatura: enriquecer(assinatura) }
 }
 
@@ -84,6 +86,7 @@ export async function editar(id: number, usuarioId: number, body: Record<string,
 
   const assinatura = await repo.update(id, dados)
   await registrarLog(usuarioId, 'EDITAR_ASSINATURA', 'assinaturas', id)
+  await recalcularSugestoes(usuarioId)
   return { assinatura: enriquecer(assinatura) }
 }
 
@@ -94,6 +97,7 @@ export async function cancelar(id: number, usuarioId: number) {
 
   const assinatura = await repo.update(id, { status: 'cancelado' })
   await registrarLog(usuarioId, 'CANCELAR_ASSINATURA', 'assinaturas', id)
+  await recalcularSugestoes(usuarioId)
   return { assinatura: enriquecer(assinatura) }
 }
 

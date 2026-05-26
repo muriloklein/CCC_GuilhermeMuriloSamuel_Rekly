@@ -1,6 +1,7 @@
 import * as repo from '../repositories/pagamentoRepository'
 import * as assinaturaRepo from '../repositories/assinaturaRepository'
 import { registrarLog } from '../repositories/usuarioRepository'
+import { recalcularSugestoes } from './economyService'
 
 const STATUS_VALIDOS = ['pago', 'pendente', 'atrasado']
 
@@ -56,6 +57,7 @@ export async function registrar(
   })
 
   await registrarLog(usuarioId, 'REGISTRAR_PAGAMENTO', 'pagamentos', pagamento.id)
+  await recalcularSugestoes(usuarioId)
   return { pagamento }
 }
 

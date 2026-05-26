@@ -35,6 +35,15 @@ interface PagamentoRecente {
   status: string
 }
 
+interface Sugestao {
+  id: number
+  assinaturaId: number
+  nomeServico: string
+  categoria: string
+  tipo: 'sobreposicao' | 'desuso'
+  descricao: string
+}
+
 interface DadosDashboard {
   resumoGastos: ResumoGastos
   vencimentosProximos: VencimentoProximo[]
@@ -67,6 +76,8 @@ export default function DashboardPage() {
   const [dados, setDados] = useState<DadosDashboard | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [visaoReal, setVisaoReal] = useState(false)
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([])
+  const [dispensando, setDispensando] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/categories', { credentials: 'include' })
@@ -74,6 +85,17 @@ export default function DashboardPage() {
       .then(d => { if (d.categorias) setCategorias(d.categorias) })
       .catch(() => {})
   }, [])
+
+  const carregarSugestoes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/economy', { credentials: 'include' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.sugestoes) setSugestoes(data.sugestoes)
+    } catch { }
+  }, [])
+
+  useEffect(() => { carregarSugestoes() }, [carregarSugestoes])
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -92,6 +114,21 @@ export default function DashboardPage() {
   }, [mes, ano, categoriaId])
 
   useEffect(() => { carregar() }, [carregar])
+
+  async function dispensar(id: number) {
+    setDispensando(id)
+    try {
+      const res = await fetch('/api/economy', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) setSugestoes(prev => prev.filter(s => s.id !== id))
+    } finally {
+      setDispensando(null)
+    }
+  }
 
   function mesAnterior() {
     if (mes === 1) { setMes(12); setAno(a => a - 1) } else setMes(m => m - 1)
@@ -276,6 +313,41 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {sugestoes.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 p-5">
+          <h2 className="text-sm font-semibold text-amber-700 mb-4 flex items-center gap-2">
+            <span>💡</span> Sugestões de economia
+            <span className="ml-auto text-xs font-normal text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full">
+              {sugestoes.length} alerta{sugestoes.length > 1 ? 's' : ''}
+            </span>
+          </h2>
+          <ul className="space-y-3">
+            {sugestoes.map(s => (
+              <li key={s.id} className="flex items-start justify-between gap-4 bg-amber-50 rounded-lg px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-lg mt-0.5">{s.tipo === 'sobreposicao' ? '🔁' : '💤'}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-amber-800 mb-0.5">
+                      {s.tipo === 'sobreposicao' ? 'Sobreposição de serviços' : 'Possível desuso'}
+                      {' · '}<span className="font-normal text-amber-700">{s.categoria}</span>
+                    </p>
+                    <p className="text-xs text-amber-700">{s.descricao}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => dispensar(s.id)}
+                  disabled={dispensando === s.id}
+                  className="flex-shrink-0 text-xs text-amber-500 hover:text-amber-700 disabled:opacity-40 border border-amber-200 hover:border-amber-400 rounded-lg px-2.5 py-1 transition"
+                  title="Dispensar sugestão"
+                >
+                  {dispensando === s.id ? '...' : 'Dispensar'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link href="/subscriptions"
           className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-5 transition flex items-center justify-between">
@@ -302,7 +374,6 @@ export default function DashboardPage() {
           <span className="text-2xl">🏷️</span>
         </Link>
       </div>
-
     </div>
   )
 }
