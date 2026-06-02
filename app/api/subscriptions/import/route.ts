@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessao } from '@/src/lib/auth'
 import * as svc from '@/src/lib/services/assinaturaService'
 import * as categoriaRepo from '@/src/lib/repositories/categoriaRepository'
+import * as assinaturaRepo from '@/src/lib/repositories/assinaturaRepository'
 
 const PERIODOS_VALIDOS = ['mensal', 'trimestral', 'semestral', 'anual']
 const COLUNAS_OBRIGATORIAS = ['nome_servico', 'categoria', 'valor', 'moeda', 'periodo', 'data_inicio', 'dia_cobranca']
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verifica duplicata por nome
-    const { assinaturas: existentes } = await svc.listar(sessao.id, { nome: registro.nome_servico }).then(a => ({ assinaturas: a }))
+    const existentes = await assinaturaRepo.findAllByUsuario(sessao.id, { nome: registro.nome_servico })
     const duplicata = existentes.find(
       (a: { nome_servico: string }) => a.nome_servico.toLowerCase() === registro.nome_servico.toLowerCase()
     )
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     if (resultado.erro) {
       rejeitados.push({ linha, motivo: resultado.erro })
     } else {
-      importados.push(resultado.assinatura!.id)
+      importados.push(linha)
     }
   }
 
