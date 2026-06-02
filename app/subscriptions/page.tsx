@@ -11,13 +11,19 @@ interface Assinatura {
 
 const PERIODOS = ['mensal', 'trimestral', 'semestral', 'anual']
 const STATUS_OPTS = ['ativo', 'teste', 'cancelado']
-const MOEDAS = ['BRL', 'USD', 'EUR']
+const MOEDAS = ['BRL', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'CNY', 'SEK', 'NZD']
 
 const labelPeriodo: Record<string, string> = { mensal: 'Mensal', trimestral: 'Trimestral', semestral: 'Semestral', anual: 'Anual' }
 const badgeStatus: Record<string, string> = {
   ativo: 'bg-green-100 text-green-700',
   teste: 'bg-yellow-100 text-yellow-700',
   cancelado: 'bg-gray-100 text-gray-500',
+}
+
+const labelStatus: Record<string, string> = {
+  ativo: 'Ativo',
+  teste: 'Teste',
+  cancelado: 'Cancelado',
 }
 
 function formatBRL(v: number) {
@@ -28,6 +34,13 @@ const formVazio = {
   nomeServico: '', categoriaId: '', valor: '', moeda: 'BRL',
   periodo: 'mensal', dataInicio: '', diaCobranca: '', status: 'ativo', participantes: '1',
 }
+
+function formatStatus(status: string) {
+  return labelStatus[status.toLowerCase()] ?? status
+}
+
+const fieldClassName =
+  'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400'
 
 export default function AssinaturasPage() {
   const [assinaturas, setAssinaturas] = useState<Assinatura[]>([])
@@ -119,7 +132,40 @@ export default function AssinaturasPage() {
     feedback('Assinatura excluída.', 'ok'); carregar()
   }
 
-  // Preview ao vivo do custo real
+  const [modalImport, setModalImport] = useState(false)
+  const [importando, setImportando] = useState(false)
+  const [resultadoImport, setResultadoImport] = useState<{
+    importados: number; rejeitados: Array<{ linha: number; motivo: string }>; total: number
+  } | null>(null)
+
+  async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportando(true)
+    setResultadoImport(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/subscriptions/import', { method: 'POST', body: fd })
+    const data = await res.json()
+    setImportando(false)
+    if (!res.ok) { feedback(data.erro ?? 'Erro ao importar.', 'erro'); return }
+    setResultadoImport(data)
+    setModalImport(true)
+    carregar()
+    // Limpa input
+    e.target.value = ''
+  }
+
+  async function downloadTemplate() {
+    const res = await fetch('/api/subscriptions/import')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'template_assinaturas.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+
   const valorNum = Number(form.valor) || 0
   const partNum = Number(form.participantes) || 1
   const divisores: Record<string, number> = { mensal: 1, trimestral: 3, semestral: 6, anual: 12 }
@@ -128,8 +174,18 @@ export default function AssinaturasPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Assinaturas</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 mr-auto">Assinaturas</h1>
+        <button
+          onClick={downloadTemplate}
+          className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium transition"
+        >
+          ↓ Template CSV
+        </button>
+        <label className={`border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${importando ? 'opacity-60 pointer-events-none' : ''}`}>
+          {importando ? 'Importando...' : '↑ Importar CSV'}
+          <input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} disabled={importando} />
+        </label>
         <button onClick={abrirCriar}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
           + Nova assinatura
@@ -147,7 +203,7 @@ export default function AssinaturasPage() {
         <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <option value="">Todos os status</option>
-          {STATUS_OPTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          {STATUS_OPTS.map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
         </select>
         {(filtroNome || filtroStatus) &&
           <button onClick={() => { setFiltroNome(''); setFiltroStatus('') }}
@@ -166,7 +222,7 @@ export default function AssinaturasPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-gray-800 truncate">{a.nome_servico}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeStatus[a.status] ?? ''}`}>
-                      {a.status}
+                      {formatStatus(a.status)}
                     </span>
                     {a.participantes > 1 &&
                       <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
@@ -213,14 +269,14 @@ export default function AssinaturasPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700">Nome do serviço *</label>
                 <input required value={form.nomeServico} onChange={e => setForm(f => ({ ...f, nomeServico: e.target.value }))}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className={fieldClassName}
                   placeholder="Ex: Netflix, Spotify..." />
               </div>
 
               <div>
                 <label className="text-sm font-medium text-gray-700">Categoria *</label>
                 <select required value={form.categoriaId} onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value }))}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  className={fieldClassName}>
                   <option value="">Selecione...</option>
                   {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
@@ -231,12 +287,12 @@ export default function AssinaturasPage() {
                   <label className="text-sm font-medium text-gray-700">Valor *</label>
                   <input required type="number" min="0.01" step="0.01" value={form.valor}
                     onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className={fieldClassName} />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Moeda</label>
                   <select value={form.moeda} onChange={e => setForm(f => ({ ...f, moeda: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    className={fieldClassName}>
                     {MOEDAS.map(m => <option key={m}>{m}</option>)}
                   </select>
                 </div>
@@ -246,7 +302,7 @@ export default function AssinaturasPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Período *</label>
                   <select required value={form.periodo} onChange={e => setForm(f => ({ ...f, periodo: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    className={fieldClassName}>
                     {PERIODOS.map(p => <option key={p} value={p}>{labelPeriodo[p]}</option>)}
                   </select>
                 </div>
@@ -254,7 +310,7 @@ export default function AssinaturasPage() {
                   <label className="text-sm font-medium text-gray-700">Dia de cobrança *</label>
                   <input required type="number" min="1" max="31" value={form.diaCobranca}
                     onChange={e => setForm(f => ({ ...f, diaCobranca: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className={fieldClassName} />
                 </div>
               </div>
 
@@ -262,15 +318,15 @@ export default function AssinaturasPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Status</label>
                   <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                    {STATUS_OPTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    className={fieldClassName}>
+                    {STATUS_OPTS.map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Participantes</label>
                   <input type="number" min="1" value={form.participantes}
                     onChange={e => setForm(f => ({ ...f, participantes: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className={fieldClassName} />
                 </div>
               </div>
 
@@ -278,7 +334,7 @@ export default function AssinaturasPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Data de início</label>
                   <input type="date" value={form.dataInicio} onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className={fieldClassName} />
                 </div>
               )}
 
@@ -318,7 +374,7 @@ export default function AssinaturasPage() {
             <dl className="space-y-2 text-sm">
               {[
                 ['Categoria', detalhe.categoria.nome],
-                ['Status', detalhe.status],
+                ['Status', formatStatus(detalhe.status)],
                 ['Período', labelPeriodo[detalhe.periodo]],
                 ['Moeda', detalhe.moeda],
                 ['Valor cobrado', formatBRL(detalhe.valor)],
@@ -335,6 +391,47 @@ export default function AssinaturasPage() {
             </dl>
             <button onClick={() => setDetalhe(null)}
               className="mt-5 w-full border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal resultado importação CSV */}
+      {modalImport && resultadoImport && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[80vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Resultado da importação</h2>
+            <div className="flex gap-4 mb-4">
+              <div className="flex-1 rounded-lg bg-green-50 border border-green-200 p-3 text-center">
+                <p className="text-2xl font-bold text-green-600">{resultadoImport.importados}</p>
+                <p className="text-xs text-green-700">Importados</p>
+              </div>
+              <div className="flex-1 rounded-lg bg-red-50 border border-red-200 p-3 text-center">
+                <p className="text-2xl font-bold text-red-500">{resultadoImport.rejeitados.length}</p>
+                <p className="text-xs text-red-600">Rejeitados</p>
+              </div>
+              <div className="flex-1 rounded-lg bg-gray-50 border border-gray-200 p-3 text-center">
+                <p className="text-2xl font-bold text-gray-600">{resultadoImport.total}</p>
+                <p className="text-xs text-gray-500">Total no CSV</p>
+              </div>
+            </div>
+            {resultadoImport.rejeitados.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">Registros rejeitados:</p>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {resultadoImport.rejeitados.map((r, i) => (
+                    <div key={i} className="rounded bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+                      <span className="font-semibold">Linha {r.linha}:</span> {r.motivo}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => { setModalImport(false); setResultadoImport(null) }}
+              className="w-full border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50"
+            >
               Fechar
             </button>
           </div>

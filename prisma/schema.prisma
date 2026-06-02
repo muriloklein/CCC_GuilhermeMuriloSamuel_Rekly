@@ -27,6 +27,7 @@ model PreferenciaNotificacao {
   usuario_id           Int     @unique
   notificar_vencimento Boolean @default(true)
   notificar_atraso     Boolean @default(true)
+  dias_antecedencia    Int     @default(7)
 
   usuario Usuario @relation(fields: [usuario_id], references: [id])
 
@@ -93,12 +94,13 @@ model Pagamento {
 }
 
 model Notificacao {
-  id         Int      @id @default(autoincrement())
-  usuario_id Int
-  tipo       String
-  mensagem   String
-  enviado_em DateTime @default(now())
-  lido       Boolean  @default(false)
+  id           Int      @id @default(autoincrement())
+  usuario_id   Int
+  tipo         String
+  mensagem     String
+  enviado_em   DateTime @default(now())
+  lido         Boolean  @default(false)
+  data_ref     String?
 
   usuario Usuario @relation(fields: [usuario_id], references: [id])
 
