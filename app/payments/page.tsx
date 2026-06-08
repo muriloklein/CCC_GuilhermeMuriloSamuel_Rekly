@@ -23,9 +23,9 @@ const MESES = [
 ]
 
 const badgeStatus: Record<string, string> = {
-  pago: 'bg-green-100 text-green-700',
-  pendente: 'bg-yellow-100 text-yellow-700',
-  atrasado: 'bg-red-100 text-red-600',
+  pago: 'bg-green-100 text-green-800',
+  pendente: 'bg-amber-100 text-amber-800',
+  atrasado: 'bg-red-100 text-red-800',
 }
 
 function formatBRL(v: number) {
@@ -194,7 +194,7 @@ export default function PagamentosPage() {
         <div className="flex items-center gap-2 mb-3">
           <span className="text-sm font-medium text-gray-700">Filtros</span>
           {filtroAtivo && (
-            <button onClick={limparFiltros} className="text-xs text-gray-400 hover:text-gray-600 ml-auto">
+            <button onClick={limparFiltros} className="text-xs text-gray-500 hover:text-gray-700 ml-auto">
               Limpar filtros
             </button>
           )}
@@ -248,14 +248,14 @@ export default function PagamentosPage() {
 
       {/* Lista de pagamentos */}
       {pagamentos.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-400 text-sm">
+        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-500 text-sm">
           Nenhum pagamento encontrado.
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-gray-500 text-xs uppercase">
+              <tr className="border-b border-gray-100 bg-gray-50 text-gray-600 text-xs uppercase">
                 <th className="text-left px-5 py-3">Assinatura</th>
                 <th className="text-left px-5 py-3">Categoria</th>
                 <th className="text-left px-5 py-3">Data</th>
@@ -273,7 +273,7 @@ export default function PagamentosPage() {
                   <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatBRL(Number(p.valor))}</td>
                   <td className="px-5 py-3 text-center">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeStatus[p.status] ?? ''}`}>
-                      {p.status}
+                      {p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : ''}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
@@ -321,7 +321,7 @@ export default function PagamentosPage() {
                   ))}
                 </select>
                 {!editandoId && (
-                  <p className="text-xs text-gray-400 mt-1">Apenas assinaturas ativas ou em teste.</p>
+                  <p className="text-xs text-gray-500 mt-1">Apenas assinaturas ativas ou em teste.</p>
                 )}
               </div>
 
