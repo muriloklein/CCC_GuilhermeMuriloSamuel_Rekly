@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rekly — Documentação da API</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css" />
+  <style>
+    body { margin: 0; background: #f8fafc; }
+    .topbar { display: none !important; }
+    .swagger-ui .info { margin: 32px 0 24px; }
+    .swagger-ui .info .title { font-size: 28px; }
+    #swagger-ui { max-width: 1100px; margin: 0 auto; padding: 0 16px 64px; }
+  </style>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
+<script>
+const spec = {
+  openapi: "3.0.3",
+  info: {
+    title: "Rekly API",
+    version: "1.0.0",
+    description: "API REST do sistema Rekly — gerenciamento de assinaturas pessoais.\n\n**Autenticação:** cookie `rekly_token` (JWT HttpOnly), definido automaticamente após login ou cadastro. Todos os endpoints marcados com 🔒 exigem sessão ativa.\n\n**Base URL:** `https://rekly.vercel.app`"
+  },
+  servers: [{ url: "https://rekly.vercel.app", description: "Produção" }, { url: "http://localhost:3000", description: "Desenvolvimento" }],
+  tags: [
+    { name: "Auth", description: "Cadastro, login, logout e recuperação de senha" },
+    { name: "Subscriptions", description: "Gerenciamento de assinaturas pessoais" },
+    { name: "Payments", description: "Registro e histórico de pagamentos" },
+    { name: "Categories", description: "Categorias padrão e personalizadas" },
+    { name: "Dashboard", description: "Painel de controle consolidado" },
+    { name: "Economy", description: "Inteligência de economia e sugestões" },
+    { name: "Notifications", description: "Preferências de notificação por e-mail" },
+    { name: "Export", description: "Exportação e exclusão de dados (LGPD)" }
+  ],
+  components: {
+    schemas: {
+      Erro: {
+        type: "object",
+        properties: { erro: { type: "string", example: "Não autorizado." } }
+      },
+      Usuario: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          nome: { type: "string", example: "Guilherme Machado" },
+          email: { type: "string", format: "email", example: "guilherme@email.com" }
+        }
+      },
+      Categoria: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 3 },
+          nome: { type: "string", example: "Streaming" },
+          is_padrao: { type: "boolean", example: true },
+          usuario_id: { type: "integer", nullable: true, example: null }
+        }
+      },
+      Assinatura: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 7 },
+          nome_servico: { type: "string", example: "Netflix" },
+          categoria_id: { type: "integer", example: 3 },
+          valor: { type: "number", example: 55.90 },
+          moeda: { type: "string", example: "BRL" },
+          periodo: { type: "string", enum: ["mensal","trimestral","semestral","anual"], example: "mensal" },
+          data_inicio: { type: "string", format: "date", example: "2024-01-01" },
+          dia_cobranca: { type: "integer", minimum: 1, maximum: 31, example: 10 },
+          status: { type: "string", enum: ["ativo","teste","cancelado"], example: "ativo" },
+          participantes: { type: "integer", minimum: 1, example: 1 },
+          criado_em: { type: "string", format: "date-time" },
+          mensalidade: { type: "number", description: "Equivalente mensal calculado automaticamente", example: 55.90 },
+          custoReal: { type: "number", description: "Valor nominal ÷ participantes", example: 27.95 }
+        }
+      },
+      Pagamento: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 12 },
+          assinatura_id: { type: "integer", example: 7 },
+          valor: { type: "number", example: 55.90 },
+          data_pagamento: { type: "string", format: "date-time", example: "2026-06-08T00:00:00.000Z" },
+          status: { type: "string", enum: ["pago","pendente","atrasado"], example: "pago" },
+          assinatura: { $ref: "#/components/schemas/Assinatura" }
+        }
+      },
+      PreferenciaNotificacao: {
+        type: "object",
+        properties: {
+          id: { type: "integer" },
+          usuario_id: { type: "integer" },
+          notificar_vencimento: { type: "boolean", example: true },
+          notificar_atraso: { type: "boolean", example: true },
+          dias_antecedencia: { type: "integer", minimum: 1, maximum: 30, example: 7 }
+        }
+      },
+      SugestaoEconomia: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 2 },
+          assinatura_id: { type: "integer", example: 7 },
+          tipo: { type: "string", enum: ["sobreposicao","desuso"], example: "sobreposicao" },
+          descricao: { type: "string", example: "Você tem 2 assinaturas ativas em Streaming." },
+          dispensada: { type: "boolean", example: false },
+          criado_em: { type: "string", format: "date-time" }
+        }
+      }
+    }
+  },
+  paths: {
+
+    "/api/auth": {
+      post: {
+        tags: ["Auth"],
+        summary: "Autenticação multipropósito",
+        description: "Endpoint único para todas as ações de autenticação. A ação é determinada pelo campo `action` no body.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["action"],
+                properties: {
+                  action: {
+                    type: "string",
+                    enum: ["cadastrar","login","logout","forgot-password","reset-password"],
+                    example: "login"
+                  },
+                  nome: { type: "string", example: "Guilherme Machado", description: "Obrigatório para `cadastrar`" },
+                  email: { type: "string", format: "email", example: "guilherme@email.com" },
+                  senha: { type: "string", minLength: 8, example: "minhasenha123", description: "Obrigatório para `cadastrar` e `login`" },
+                  confirmarSenha: { type: "string", example: "minhasenha123", description: "Obrigatório para `cadastrar`" },
+                  token: { type: "string", description: "Token de reset recebido por e-mail. Obrigatório para `reset-password`" },
+                  novaSenha: { type: "string", description: "Obrigatório para `reset-password`" }
+                }
+              },
+              examples: {
+                login: { summary: "Login", value: { action: "login", email: "guilherme@email.com", senha: "minhasenha123" } },
+                cadastrar: { summary: "Cadastro", value: { action: "cadastrar", nome: "Guilherme", email: "guilherme@email.com", senha: "minhasenha123", confirmarSenha: "minhasenha123" } },
+                logout: { summary: "Logout", value: { action: "logout" } },
+                forgotPassword: { summary: "Esqueci a senha", value: { action: "forgot-password", email: "guilherme@email.com" } },
+                resetPassword: { summary: "Redefinir senha", value: { action: "reset-password", token: "abc123xyz", novaSenha: "novaSenha456", confirmarSenha: "novaSenha456" } }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Login realizado com sucesso. Cookie `rekly_token` definido.",
+            content: { "application/json": { schema: { type: "object", properties: { usuario: { $ref: "#/components/schemas/Usuario" } } } } }
+          },
+          "201": {
+            description: "Cadastro realizado. Cookie `rekly_token` definido.",
+            content: { "application/json": { schema: { type: "object", properties: { usuario: { $ref: "#/components/schemas/Usuario" } } } } }
+          },
+          "400": { description: "Dados inválidos ou ação desconhecida", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Credenciais inválidas", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      get: {
+        tags: ["Auth"],
+        summary: "Retorna o usuário autenticado atual",
+        description: "Lê o cookie `rekly_token` e retorna os dados do usuário da sessão ativa. Não retorna erro se não houver sessão — retorna `{ usuario: null }`.",
+        responses: {
+          "200": {
+            description: "Usuário da sessão ou null",
+            content: { "application/json": { schema: { type: "object", properties: { usuario: { oneOf: [{ $ref: "#/components/schemas/Usuario" }, { type: "null" }] } } } } }
+          }
+        }
+      }
+    },
+
+    "/api/subscriptions": {
+      get: {
+        tags: ["Subscriptions"],
+        summary: "🔒 Listar assinaturas",
+        description: "Retorna todas as assinaturas do usuário autenticado, com suporte a filtros. Inclui os campos calculados `mensalidade` e `custoReal`.",
+        parameters: [
+          { name: "nome", in: "query", schema: { type: "string" }, description: "Filtra por nome do serviço (busca parcial, case-insensitive)", example: "Netflix" },
+          { name: "categoriaId", in: "query", schema: { type: "integer" }, description: "Filtra por ID da categoria" },
+          { name: "status", in: "query", schema: { type: "string", enum: ["ativo","teste","cancelado"] }, description: "Filtra por status da assinatura" }
+        ],
+        responses: {
+          "200": {
+            description: "Lista de assinaturas",
+            content: { "application/json": { schema: { type: "object", properties: { assinaturas: { type: "array", items: { $ref: "#/components/schemas/Assinatura" } } } } } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      post: {
+        tags: ["Subscriptions"],
+        summary: "🔒 Criar assinatura ou cancelar existente",
+        description: "Cria uma nova assinatura. Se `action: 'cancelar'` for informado junto com `id`, cancela a assinatura existente (altera status para `cancelado` sem excluir o registro).",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  action: { type: "string", enum: ["cancelar"], description: "Omitir para criação. Usar `cancelar` para cancelar uma assinatura existente." },
+                  id: { type: "integer", description: "Obrigatório quando `action: cancelar`" },
+                  nomeServico: { type: "string", example: "Spotify" },
+                  categoriaId: { type: "integer", example: 3 },
+                  valor: { type: "number", example: 24.90 },
+                  moeda: { type: "string", example: "BRL" },
+                  periodo: { type: "string", enum: ["mensal","trimestral","semestral","anual"], example: "mensal" },
+                  dataInicio: { type: "string", format: "date", example: "2025-01-01" },
+                  diaCobranca: { type: "integer", minimum: 1, maximum: 31, example: 10 },
+                  status: { type: "string", enum: ["ativo","teste","cancelado"], example: "ativo" },
+                  participantes: { type: "integer", minimum: 1, example: 1 }
+                }
+              },
+              examples: {
+                criar: { summary: "Criar assinatura", value: { nomeServico: "Spotify", categoriaId: 3, valor: 24.90, moeda: "BRL", periodo: "mensal", dataInicio: "2025-01-01", diaCobranca: 10, status: "ativo", participantes: 1 } },
+                cancelar: { summary: "Cancelar assinatura", value: { action: "cancelar", id: 7 } }
+              }
+            }
+          }
+        },
+        responses: {
+          "201": { description: "Assinatura criada com sucesso", content: { "application/json": { schema: { type: "object", properties: { assinatura: { $ref: "#/components/schemas/Assinatura" } } } } } },
+          "200": { description: "Assinatura cancelada com sucesso", content: { "application/json": { schema: { type: "object", properties: { assinatura: { $ref: "#/components/schemas/Assinatura" } } } } } },
+          "400": { description: "Dados inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      put: {
+        tags: ["Subscriptions"],
+        summary: "🔒 Editar assinatura",
+        description: "Atualiza os dados de uma assinatura existente. O campo `id` é obrigatório no body. A data de cadastro (`criado_em`) não pode ser alterada.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["id"],
+                properties: {
+                  id: { type: "integer", example: 7 },
+                  nomeServico: { type: "string", example: "Spotify Premium" },
+                  categoriaId: { type: "integer" },
+                  valor: { type: "number" },
+                  moeda: { type: "string" },
+                  periodo: { type: "string", enum: ["mensal","trimestral","semestral","anual"] },
+                  dataInicio: { type: "string", format: "date" },
+                  diaCobranca: { type: "integer", minimum: 1, maximum: 31 },
+                  status: { type: "string", enum: ["ativo","teste","cancelado"] },
+                  participantes: { type: "integer", minimum: 1 }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Assinatura atualizada", content: { "application/json": { schema: { type: "object", properties: { assinatura: { $ref: "#/components/schemas/Assinatura" } } } } } },
+          "400": { description: "Dados inválidos ou assinatura não encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      delete: {
+        tags: ["Subscriptions"],
+        summary: "🔒 Excluir assinatura",
+        description: "Exclui uma assinatura permanentemente. Só é permitido se não houver pagamentos vinculados a ela.",
+        parameters: [{ name: "id", in: "query", required: true, schema: { type: "integer" }, description: "ID da assinatura a excluir" }],
+        responses: {
+          "200": { description: "Assinatura excluída", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true } } } } } },
+          "400": { description: "Assinatura não encontrada ou possui pagamentos vinculados", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/subscriptions/import": {
+      get: {
+        tags: ["Subscriptions"],
+        summary: "🔒 Baixar template CSV",
+        description: "Retorna um arquivo CSV com o cabeçalho esperado e uma linha de exemplo, para ser usado como modelo de importação.",
+        responses: {
+          "200": {
+            description: "Arquivo CSV para download",
+            content: { "text/csv": { schema: { type: "string" }, example: "nome_servico,categoria,valor,moeda,periodo,data_inicio,dia_cobranca,status,participantes\nNetflix,Streaming,55.90,BRL,mensal,2024-01-01,15,ativo,1" } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      post: {
+        tags: ["Subscriptions"],
+        summary: "🔒 Importar assinaturas via CSV",
+        description: "Processa um arquivo CSV com múltiplas assinaturas. Cada linha é validada individualmente — erros em uma linha não impedem a importação das demais. Categorias inexistentes são criadas automaticamente como personalizadas.",
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["file"],
+                properties: { file: { type: "string", format: "binary", description: "Arquivo .csv com as assinaturas" } }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Resultado da importação",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    importados: { type: "integer", example: 3 },
+                    total: { type: "integer", example: 4 },
+                    rejeitados: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          linha: { type: "integer", example: 3 },
+                          motivo: { type: "string", example: "Assinatura \"Netflix\" já existe no sistema." }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "CSV inválido ou colunas obrigatórias ausentes", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/payments": {
+      get: {
+        tags: ["Payments"],
+        summary: "🔒 Listar pagamentos",
+        description: "Retorna os pagamentos do usuário autenticado. Todos os filtros são opcionais e combináveis. Ordenados do mais recente para o mais antigo.",
+        parameters: [
+          { name: "assinaturaId", in: "query", schema: { type: "integer" }, description: "Filtra por assinatura específica" },
+          { name: "status", in: "query", schema: { type: "string", enum: ["pago","pendente","atrasado"] } },
+          { name: "mes", in: "query", schema: { type: "integer", minimum: 1, maximum: 12 }, example: 6 },
+          { name: "ano", in: "query", schema: { type: "integer" }, example: 2026 }
+        ],
+        responses: {
+          "200": {
+            description: "Lista de pagamentos",
+            content: { "application/json": { schema: { type: "object", properties: { pagamentos: { type: "array", items: { $ref: "#/components/schemas/Pagamento" } } } } } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      post: {
+        tags: ["Payments"],
+        summary: "🔒 Registrar pagamento",
+        description: "Registra um novo pagamento vinculado a uma assinatura. Não é permitido registrar para assinaturas com status `cancelado`.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["assinaturaId", "valor", "dataPagamento"],
+                properties: {
+                  assinaturaId: { type: "integer", example: 7 },
+                  valor: { type: "number", minimum: 0.01, example: 24.90 },
+                  dataPagamento: { type: "string", format: "date", example: "2026-06-08" },
+                  status: { type: "string", enum: ["pago","pendente","atrasado"], default: "pago", example: "pago" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "201": { description: "Pagamento registrado", content: { "application/json": { schema: { type: "object", properties: { pagamento: { $ref: "#/components/schemas/Pagamento" } } } } } },
+          "400": { description: "Dados inválidos, assinatura cancelada ou não encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      put: {
+        tags: ["Payments"],
+        summary: "🔒 Editar pagamento",
+        description: "Atualiza os campos `valor`, `dataPagamento` e/ou `status` de um pagamento existente.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["id"],
+                properties: {
+                  id: { type: "integer", example: 12 },
+                  valor: { type: "number", example: 24.90 },
+                  dataPagamento: { type: "string", format: "date", example: "2026-06-09" },
+                  status: { type: "string", enum: ["pago","pendente","atrasado"] }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Pagamento atualizado", content: { "application/json": { schema: { type: "object", properties: { pagamento: { $ref: "#/components/schemas/Pagamento" } } } } } },
+          "400": { description: "Dados inválidos ou pagamento não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      delete: {
+        tags: ["Payments"],
+        summary: "🔒 Excluir pagamento",
+        description: "Exclui permanentemente um registro de pagamento.",
+        parameters: [{ name: "id", in: "query", required: true, schema: { type: "integer" }, description: "ID do pagamento a excluir" }],
+        responses: {
+          "200": { description: "Pagamento excluído", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true } } } } } },
+          "400": { description: "Pagamento não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/categories": {
+      get: {
+        tags: ["Categories"],
+        summary: "🔒 Listar categorias",
+        description: "Retorna todas as categorias disponíveis: padrão do sistema + personalizadas do usuário.",
+        responses: {
+          "200": {
+            description: "Lista de categorias",
+            content: { "application/json": { schema: { type: "object", properties: { categorias: { type: "array", items: { $ref: "#/components/schemas/Categoria" } } } } } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      post: {
+        tags: ["Categories"],
+        summary: "🔒 Criar categoria personalizada",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["nome"], properties: { nome: { type: "string", example: "Jogos" } } } } }
+        },
+        responses: {
+          "201": { description: "Categoria criada", content: { "application/json": { schema: { type: "object", properties: { categoria: { $ref: "#/components/schemas/Categoria" } } } } } },
+          "400": { description: "Nome duplicado ou inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      put: {
+        tags: ["Categories"],
+        summary: "🔒 Editar categoria personalizada",
+        description: "Categorias padrão do sistema não podem ser editadas.",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["id","nome"], properties: { id: { type: "integer", example: 9 }, nome: { type: "string", example: "Games" } } } } }
+        },
+        responses: {
+          "200": { description: "Categoria atualizada", content: { "application/json": { schema: { type: "object", properties: { categoria: { $ref: "#/components/schemas/Categoria" } } } } } },
+          "400": { description: "Nome duplicado, categoria padrão ou não encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      delete: {
+        tags: ["Categories"],
+        summary: "🔒 Excluir categoria personalizada",
+        description: "Só é permitido se a categoria não estiver vinculada a nenhuma assinatura. Categorias padrão não podem ser excluídas.",
+        parameters: [{ name: "id", in: "query", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Categoria excluída", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true } } } } } },
+          "400": { description: "Categoria padrão, possui assinaturas ou não encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/dashboard": {
+      get: {
+        tags: ["Dashboard"],
+        summary: "🔒 Dados consolidados do painel",
+        description: "Retorna todos os dados necessários para o Dashboard: gastos mensais (nominal e custo real), vencimentos nos próximos 7 dias, total por categoria, indicadores de pendentes/atrasados e últimos 5 pagamentos. Por padrão retorna o mês e ano atuais.",
+        parameters: [
+          { name: "mes", in: "query", schema: { type: "integer", minimum: 1, maximum: 12 }, description: "Mês (1–12). Padrão: mês atual.", example: 6 },
+          { name: "ano", in: "query", schema: { type: "integer" }, description: "Ano. Padrão: ano atual.", example: 2026 },
+          { name: "categoriaId", in: "query", schema: { type: "integer" }, description: "Filtra todos os indicadores por categoria" }
+        ],
+        responses: {
+          "200": {
+            description: "Dados do dashboard",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    resumoGastos: {
+                      type: "object",
+                      properties: {
+                        totalNominal: { type: "number", example: 155.80 },
+                        totalCustoReal: { type: "number", example: 130.45 },
+                        quantidadeAtivas: { type: "integer", example: 4 }
+                      }
+                    },
+                    vencimentosProximos: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "integer" },
+                          nome_servico: { type: "string" },
+                          valor: { type: "number" },
+                          dia_cobranca: { type: "integer" },
+                          diasRestantes: { type: "integer", example: 2 }
+                        }
+                      }
+                    },
+                    totalPorCategoria: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          categoria: { type: "string", example: "Streaming" },
+                          total: { type: "number", example: 80.80 },
+                          percentual: { type: "number", example: 51.8 }
+                        }
+                      }
+                    },
+                    indicadores: {
+                      type: "object",
+                      properties: {
+                        quantidadePendentes: { type: "integer" },
+                        valorPendentes: { type: "number" },
+                        quantidadeAtrasados: { type: "integer" },
+                        valorAtrasados: { type: "number" }
+                      }
+                    },
+                    ultimosPagamentos: {
+                      type: "array",
+                      maxItems: 5,
+                      items: { $ref: "#/components/schemas/Pagamento" }
+                    },
+                    sugestoes: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/SugestaoEconomia" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/economy": {
+      get: {
+        tags: ["Economy"],
+        summary: "🔒 Listar sugestões de economia ativas",
+        description: "Retorna as sugestões não dispensadas do usuário: alertas de sobreposição de categorias e assinaturas em possível desuso (sem pagamento nos últimos 60 dias).",
+        responses: {
+          "200": {
+            description: "Lista de sugestões ativas",
+            content: { "application/json": { schema: { type: "object", properties: { sugestoes: { type: "array", items: { $ref: "#/components/schemas/SugestaoEconomia" } } } } } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      post: {
+        tags: ["Economy"],
+        summary: "🔒 Recalcular sugestões manualmente",
+        description: "Força o recálculo imediato das sugestões de economia. Retorna a lista atualizada. Normalmente o recálculo é automático a cada criação, edição, cancelamento de assinatura ou registro de pagamento.",
+        responses: {
+          "200": {
+            description: "Sugestões recalculadas",
+            content: { "application/json": { schema: { type: "object", properties: { sugestoes: { type: "array", items: { $ref: "#/components/schemas/SugestaoEconomia" } } } } } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      patch: {
+        tags: ["Economy"],
+        summary: "🔒 Dispensar sugestão",
+        description: "Oculta uma sugestão específica sem alterar o status da assinatura. A sugestão não reaparece a menos que o estado das assinaturas mude novamente.",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["id"], properties: { id: { type: "integer", example: 2, description: "ID da sugestão a dispensar" } } } } }
+        },
+        responses: {
+          "200": { description: "Sugestão dispensada", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true } } } } } },
+          "400": { description: "Sugestão não encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/notifications": {
+      get: {
+        tags: ["Notifications"],
+        summary: "🔒 Buscar preferências de notificação",
+        description: "Retorna as preferências de e-mail do usuário. Se o usuário ainda não configurou as preferências, retorna os valores padrão (`true`, `true`, `7`).",
+        responses: {
+          "200": {
+            description: "Preferências de notificação",
+            content: { "application/json": { schema: { type: "object", properties: { preferencias: { $ref: "#/components/schemas/PreferenciaNotificacao" } } } } }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      put: {
+        tags: ["Notifications"],
+        summary: "🔒 Salvar preferências de notificação",
+        description: "Atualiza as preferências de notificação por e-mail. Todos os três campos são obrigatórios.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["notificar_vencimento","notificar_atraso","dias_antecedencia"],
+                properties: {
+                  notificar_vencimento: { type: "boolean", example: true, description: "Receber e-mail quando assinatura vencer nos próximos N dias" },
+                  notificar_atraso: { type: "boolean", example: true, description: "Receber e-mail quando pagamento estiver atrasado" },
+                  dias_antecedencia: { type: "integer", minimum: 1, maximum: 30, example: 7, description: "Quantos dias antes do vencimento o e-mail é enviado" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Preferências salvas", content: { "application/json": { schema: { type: "object", properties: { preferencias: { $ref: "#/components/schemas/PreferenciaNotificacao" } } } } } },
+          "400": { description: "Tipos de dados incorretos", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/notifications/trigger": {
+      post: {
+        tags: ["Notifications"],
+        summary: "Disparar processamento de notificações (cron)",
+        description: "Processa e envia e-mails para todos os usuários do sistema conforme suas preferências. **Em produção** exige o header `Authorization: Bearer {CRON_SECRET}`. Em desenvolvimento, aceita sem autenticação.\n\nUsado pelo Vercel Cron Jobs diariamente às 08:00 UTC (`0 8 * * *`).",
+        security: [],
+        parameters: [
+          { name: "Authorization", in: "header", schema: { type: "string", example: "Bearer meu_cron_secret" }, description: "Obrigatório em produção" }
+        ],
+        responses: {
+          "200": {
+            description: "Processamento concluído",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    enviados: { type: "integer", example: 3 },
+                    erros: { type: "integer", example: 0 },
+                    executado_em: { type: "string", format: "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { description: "CRON_SECRET inválido (apenas em produção)", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "500": { description: "Erro interno ou CRON_SECRET não configurado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    },
+
+    "/api/export": {
+      get: {
+        tags: ["Export"],
+        summary: "🔒 Exportar dados pessoais (LGPD)",
+        description: "Exporta todos os dados pessoais do usuário: perfil, assinaturas, categorias personalizadas e histórico de pagamentos. A ação é registrada em log de auditoria.",
+        parameters: [
+          { name: "formato", in: "query", schema: { type: "string", enum: ["json","csv"], default: "json" }, description: "Formato do arquivo gerado" }
+        ],
+        responses: {
+          "200": {
+            description: "Arquivo para download",
+            content: {
+              "application/json": { schema: { type: "string", format: "binary" } },
+              "text/csv": { schema: { type: "string", format: "binary" } }
+            }
+          },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "500": { description: "Erro ao gerar exportação", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      },
+      delete: {
+        tags: ["Export"],
+        summary: "🔒 Excluir conta permanentemente (LGPD)",
+        description: "Remove permanentemente todos os dados do usuário em uma transação atômica: sugestões, notificações, preferências, logs, pagamentos, assinaturas, categorias personalizadas e o próprio usuário. O cookie de sessão é invalidado automaticamente.",
+        responses: {
+          "200": { description: "Conta excluída. Cookie de sessão removido.", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true } } } } } },
+          "401": { description: "Não autorizado", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } },
+          "500": { description: "Erro ao excluir conta", content: { "application/json": { schema: { $ref: "#/components/schemas/Erro" } } } }
+        }
+      }
+    }
+  }
+};
+
+window.onload = () => {
+  SwaggerUIBundle({
+    spec,
+    dom_id: '#swagger-ui',
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: "BaseLayout",
+    deepLinking: true,
+    defaultModelsExpandDepth: 1,
+    defaultModelExpandDepth: 1,
+    docExpansion: "list",
+    filter: true,
+    tryItOutEnabled: false,
+  });
+};
+</script>
+</body>
+</html>
