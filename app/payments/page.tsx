@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface Assinatura {
   id: number
@@ -34,7 +34,13 @@ function formatBRL(v: number) {
 
 function formatData(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleDateString('pt-BR')
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+}
+
+function formatarDataBR(iso: string) {
+  if (!iso) return ''
+  const d = new Date(`${iso}T00:00:00`)
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 }
 
 const anoAtual = new Date().getFullYear()
@@ -50,13 +56,13 @@ const formVazio = {
 export default function PagamentosPage() {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [assinaturas, setAssinaturas] = useState<Assinatura[]>([])
+  const dataPagamentoRef = useRef<HTMLInputElement | null>(null)
 
   // Filtros
   const [filtroAssinatura, setFiltroAssinatura] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroMes, setFiltroMes] = useState(String(mesAtual))
   const [filtroAno, setFiltroAno] = useState(String(anoAtual))
-  const [filtroAtivo, setFiltroAtivo] = useState(false)
 
   // Modal
   const [modalAberto, setModalAberto] = useState(false)
@@ -69,16 +75,14 @@ export default function PagamentosPage() {
 
   const carregar = useCallback(async () => {
     const params = new URLSearchParams()
-    if (filtroAtivo) {
-      if (filtroAssinatura) params.set('assinaturaId', filtroAssinatura)
-      if (filtroStatus) params.set('status', filtroStatus)
-      if (filtroMes) params.set('mes', filtroMes)
-      if (filtroAno) params.set('ano', filtroAno)
-    }
+    if (filtroAssinatura) params.set('assinaturaId', filtroAssinatura)
+    if (filtroStatus) params.set('status', filtroStatus)
+    if (filtroMes) params.set('mes', filtroMes)
+    if (filtroAno) params.set('ano', filtroAno)
     const res = await fetch(`/api/payments?${params}`)
     const data = await res.json()
     if (data.pagamentos) setPagamentos(data.pagamentos)
-  }, [filtroAtivo, filtroAssinatura, filtroStatus, filtroMes, filtroAno])
+  }, [filtroAssinatura, filtroStatus, filtroMes, filtroAno])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -98,6 +102,13 @@ export default function PagamentosPage() {
     setForm(formVazio)
     setEditandoId(null)
     setModalAberto(true)
+  }
+
+  function abrirCalendarioData() {
+    const input = dataPagamentoRef.current
+    if (!input) return
+    if (typeof input.showPicker === 'function') input.showPicker()
+    else input.click()
   }
 
   function abrirEditar(p: Pagamento) {
@@ -150,7 +161,6 @@ export default function PagamentosPage() {
     setFiltroStatus('')
     setFiltroMes(String(mesAtual))
     setFiltroAno(String(anoAtual))
-    setFiltroAtivo(false)
   }
 
   const assinaturasAtivas = assinaturas.filter(a => a.status !== 'cancelado')
@@ -193,7 +203,7 @@ export default function PagamentosPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-sm font-medium text-gray-700">Filtros</span>
-          {filtroAtivo && (
+          {(filtroAssinatura || filtroStatus || filtroMes !== String(mesAtual) || filtroAno !== String(anoAtual)) && (
             <button onClick={limparFiltros} className="text-xs text-gray-500 hover:text-gray-700 ml-auto">
               Limpar filtros
             </button>
@@ -202,7 +212,7 @@ export default function PagamentosPage() {
         <div className="flex gap-3 flex-wrap">
           <select
             value={filtroAssinatura}
-            onChange={e => { setFiltroAssinatura(e.target.value); setFiltroAtivo(true) }}
+            onChange={e => setFiltroAssinatura(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             <option value="">Todas as assinaturas</option>
@@ -211,7 +221,7 @@ export default function PagamentosPage() {
 
           <select
             value={filtroStatus}
-            onChange={e => { setFiltroStatus(e.target.value); setFiltroAtivo(true) }}
+            onChange={e => setFiltroStatus(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             <option value="">Todos os status</option>
@@ -220,7 +230,7 @@ export default function PagamentosPage() {
 
           <select
             value={filtroMes}
-            onChange={e => { setFiltroMes(e.target.value); setFiltroAtivo(true) }}
+            onChange={e => setFiltroMes(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             <option value="">Todos os meses</option>
@@ -229,7 +239,7 @@ export default function PagamentosPage() {
 
           <select
             value={filtroAno}
-            onChange={e => { setFiltroAno(e.target.value); setFiltroAtivo(true) }}
+            onChange={e => setFiltroAno(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             {[anoAtual - 1, anoAtual, anoAtual + 1].map(a => (
@@ -238,7 +248,7 @@ export default function PagamentosPage() {
           </select>
 
           <button
-            onClick={() => { setFiltroAtivo(true); carregar() }}
+            onClick={() => carregar()}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
           >
             Filtrar
@@ -340,13 +350,37 @@ export default function PagamentosPage() {
 
               <div>
                 <label className="text-sm font-medium text-gray-700">Data do pagamento *</label>
-                <input
-                  required
-                  type="date"
-                  value={form.dataPagamento}
-                  onChange={e => setForm(f => ({ ...f, dataPagamento: e.target.value }))}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                <div className="mt-1 relative">
+                  <input
+                    readOnly
+                    type="text"
+                    value={formatarDataBR(form.dataPagamento)}
+                    onClick={abrirCalendarioData}
+                    placeholder="dd/mm/aaaa"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-11 text-sm bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={abrirCalendarioData}
+                    className="absolute right-0 top-0 h-full px-3 text-gray-500 hover:text-gray-700"
+                    aria-label="Abrir calendário"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  <input
+                    ref={dataPagamentoRef}
+                    required
+                    type="date"
+                    lang="pt-BR"
+                    value={form.dataPagamento}
+                    onChange={e => setForm(f => ({ ...f, dataPagamento: e.target.value }))}
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
+                </div>
               </div>
 
               <div>

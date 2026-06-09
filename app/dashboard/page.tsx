@@ -57,6 +57,10 @@ function formatBRL(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function formatDataBR(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+}
+
 function nomeMes(mes: number) {
   return new Date(2026, mes - 1, 1).toLocaleString('pt-BR', { month: 'long' })
 }
@@ -262,7 +266,7 @@ export default function DashboardPage() {
                     <div>
                       <p className="font-medium text-gray-800">{p.nomeAssinatura}</p>
                       <p className="text-xs text-gray-400">
-                        {new Date(p.dataPagamento).toLocaleDateString('pt-BR')}
+                        {formatDataBR(p.dataPagamento)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
